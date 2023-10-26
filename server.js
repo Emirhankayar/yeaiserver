@@ -1,12 +1,32 @@
 const express = require('express');
+const session = require('express-session');
 const { createClient } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
 const cors = require('cors'); // Import the cors package
 
 dotenv.config();
 const app = express();
+const sesKey = process.env.VITE_SES_KEY;
 
-app.use(cors()); // Enable CORS for all routes
+app.use(cors());
+app.use(
+  session({
+    secret: sesKey, // Replace with your actual secret key
+    resave: false,
+    saveUninitialized: true,
+  })
+);
+
+
+
+app.post('/updatePostView/:postId', async (req, res) => {
+  const { postId } = req.params;
+  const { post_view } = req.body; // Make sure to get the current post_view value
+
+  await updatePostView(postId, post_view, req);
+  res.sendStatus(200); // Send a success response
+});
+
 
 const supabaseUrl = process.env.VITE_DB_URL;
 const supabaseKey = process.env.VITE_DB_KEY;
@@ -191,6 +211,31 @@ app.get('/redirect', (req, res) => {
   const { url } = req.query;
   res.redirect(url);
 });
+
+const updatePostView = async (postId, post_view, req) => {
+  try {
+    if (!req.session.views) {
+      req.session.views = {};
+    }
+
+    if (!req.session.views[postId]) {
+      req.session.views[postId] = true;
+
+      const updatedView = (post_view || 0) + 1;
+
+      const { data, error } = await supabase
+        .from('tools')
+        .update({ post_view: updatedView })
+        .eq('id', postId);
+      if (error) {
+        throw error;
+      }
+    }
+  } catch (error) {
+    console.error('Error updating post view:', error);
+  }
+};
+
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
