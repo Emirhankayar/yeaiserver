@@ -192,34 +192,11 @@ app.get('/redirect', (req, res) => {
   res.redirect(url);
 });
 
-const lastView = {};
-
-app.post('/updatePostView/:postId', async (req, res) => {
-  const { postId } = req.params;
-  const { post_view } = req.body;
-
-  const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-
-  const currentTime = Date.now();
-  if (lastView[clientIP] && lastView[clientIP][postId]) {
-    const lastTime = lastView[clientIP][postId];
-    const elapsedTime = currentTime - lastTime;
-    if (elapsedTime < 60000) { // Set the timeout as needed, here it's set to 1 minute
-      return res.status(429).send('Too Many Requests');
-    }
-  }
-
-  lastView[clientIP] = { ...lastView[clientIP], [postId]: currentTime };
-
-  await updatePostView(postId, post_view);
-  res.sendStatus(200); // Send a success response
-});
-
-const updatePostView = async (postId, post_view) => {
+const updatePostView = async (postId) => {
   try {
     const { data, error } = await supabase
       .from('tools')
-      .update({ post_view: post_view + 1 })
+      .update({ post_view: supabase.sql`post_view + 1` })
       .eq('id', postId);
     if (error) {
       throw error;
@@ -228,6 +205,7 @@ const updatePostView = async (postId, post_view) => {
     console.error('Error updating post view:', error);
   }
 };
+
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
