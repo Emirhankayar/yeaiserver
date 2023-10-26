@@ -187,6 +187,10 @@ app.get('/popularPosts/:categoryName', async (req, res) => {
   res.json(popularPosts);
 });
 
+app.get('/redirect', (req, res) => {
+  const { url } = req.query;
+  res.redirect(url);
+});
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
