@@ -192,35 +192,46 @@ app.get('/redirect', (req, res) => {
   res.redirect(url);
 });
 
+
+
+
+
+
+
+
+
+
+const updatePostView = async (postId, post_view) => {
+  try {
+    const updatedView = (post_view || 0) + 1;
+    console.log('Updated View:', updatedView);
+
+    const { data, error } = await supabase
+      .from('tools')
+      .update({ post_view: updatedView })
+      .eq('id', postId);
+    
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error updating post view:', error);
+  }
+};
+
 // Server-side route handler for updating post view
 app.post('/updatePostView/:postId', async (req, res) => {
   const { postId } = req.params;
+  const { post_view } = req.body;
 
   try {
-    await updatePostView(postId);
+    await updatePostView(postId, post_view);
     res.sendStatus(200); // Send a success response
   } catch (error) {
     console.error('Error updating post view:', error);
     res.sendStatus(500); // Send an error response
   }
 });
-
-// updatePostView function for server-side update
-const updatePostView = async (postId) => {
-  try {
-    const { data, error } = await supabase
-      .from('tools')
-      .update({ post_view: sql`post_view + 1` }) // Utilize the `sql` method here
-      .eq('id', postId);
-    if (error) {
-      throw error;
-    }
-  } catch (error) {
-    console.error('Error updating post view:', error);
-    throw error;
-  }
-};
-
 
 
 const port = process.env.PORT || 5000;
