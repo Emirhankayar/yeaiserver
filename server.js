@@ -1,32 +1,12 @@
 const express = require('express');
-const session = require('express-session');
 const { createClient } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
 const cors = require('cors'); // Import the cors package
 
 dotenv.config();
 const app = express();
-const sesKey = process.env.VITE_SES_KEY;
 
-app.use(cors());
-app.use(
-  session({
-    secret: sesKey, // Replace with your actual secret key
-    resave: false,
-    saveUninitialized: true,
-  })
-);
-
-
-
-app.post('/updatePostView/:postId', async (req, res) => {
-  const { postId } = req.params;
-  const { post_view } = req.body; // Make sure to get the current post_view value
-
-  await updatePostView(postId, post_view, req);
-  res.sendStatus(200); // Send a success response
-});
-
+app.use(cors()); // Enable CORS for all routes
 
 const supabaseUrl = process.env.VITE_DB_URL;
 const supabaseKey = process.env.VITE_DB_KEY;
@@ -212,30 +192,42 @@ app.get('/redirect', (req, res) => {
   res.redirect(url);
 });
 
-const updatePostView = async (postId, post_view, req) => {
-  try {
-    if (!req.session.views) {
-      req.session.views = {};
+const lastView = {};
+
+app.post('/updatePostView/:postId', async (req, res) => {
+  const { postId } = req.params;
+  const { post_view } = req.body;
+
+  const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
+  const currentTime = Date.now();
+  if (lastView[clientIP] && lastView[clientIP][postId]) {
+    const lastTime = lastView[clientIP][postId];
+    const elapsedTime = currentTime - lastTime;
+    if (elapsedTime < 60000) { // Set the timeout as needed, here it's set to 1 minute
+      return res.status(429).send('Too Many Requests');
     }
+  }
 
-    if (!req.session.views[postId]) {
-      req.session.views[postId] = true;
+  lastView[clientIP] = { ...lastView[clientIP], [postId]: currentTime };
 
-      const updatedView = (post_view || 0) + 1;
+  await updatePostView(postId, post_view);
+  res.sendStatus(200); // Send a success response
+});
 
-      const { data, error } = await supabase
-        .from('tools')
-        .update({ post_view: updatedView })
-        .eq('id', postId);
-      if (error) {
-        throw error;
-      }
+const updatePostView = async (postId, post_view) => {
+  try {
+    const { data, error } = await supabase
+      .from('tools')
+      .update({ post_view: post_view + 1 })
+      .eq('id', postId);
+    if (error) {
+      throw error;
     }
   } catch (error) {
     console.error('Error updating post view:', error);
   }
 };
-
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
