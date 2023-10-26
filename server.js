@@ -174,17 +174,19 @@ app.get('/postsByCategory', async (req, res) => {
   res.json(posts);
 });
 
-app.get('/postById', async (req, res) => {
-  const { postId } = req.query;
+app.get('/postById/:postId', async (req, res) => {
+  const { postId } = req.params;
   const post = await fetchPostById(postId);
   res.json(post);
 });
 
-app.get('/popularPosts', async (req, res) => {
-  const { categoryName, limit } = req.query;
+app.get('/popularPosts/:categoryName', async (req, res) => {
+  const { categoryName } = req.params;
+  const { limit } = req.query; // If the limit is passed as a query parameter
   const popularPosts = await fetchPopularPosts(categoryName, limit);
   res.json(popularPosts);
 });
+
 
 const port = process.env.PORT || 5000;
 app.listen(port, () => {
