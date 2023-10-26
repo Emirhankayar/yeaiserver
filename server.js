@@ -1,5 +1,5 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
+const { createClient, sql } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
 const cors = require('cors'); // Import the cors package
 
