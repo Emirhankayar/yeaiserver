@@ -30,7 +30,7 @@ const retrieveAllCategoriesFromSupabase = async () => {
       return [];
     }
 
-    const categories = data.map((item) => item.post_category.toLowerCase()).filter(category => category !== null);
+    const categories = data.map((item) => item.post_category).filter(category => category !== null);
     return categories;
   } catch (error) {
     console.error('Error fetching distinct categories:', error.message);
