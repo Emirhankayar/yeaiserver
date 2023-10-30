@@ -30,7 +30,7 @@ const retrieveAllCategoriesFromSupabase = async () => {
       return [];
     }
 
-    const categories = data.map((item) => item.post_category);
+    const categories = data.map((item) => item.post_category.toLowerCase()).filter(category => category !== null);
     return categories;
   } catch (error) {
     console.error('Error fetching distinct categories:', error.message);
@@ -38,69 +38,71 @@ const retrieveAllCategoriesFromSupabase = async () => {
   }
 };
 
-const retrieveCategoriesFromSupabase = async (page, pageSize, searchInput) => {
-    const offset = (page - 1) * pageSize;
-  let { data, error } = await supabase
-    .from('distinct_categories')
-    .select('*')
-    .order('post_category', { ascending: true })
-    .range(offset, offset + pageSize - 1);
-
-  if (searchInput) {
-    const searchTerm = `%${searchInput}%`;
-    ({ data, error } = await supabase
+const retrieveCategoriesFromSupabase = async (page) => {
+  const categoriesPerPage = 12;
+  try {
+    const { data, error } = await supabase
       .from('distinct_categories')
-      .select('post_category')
-      .order('post_category', { ascending: true })
-      .range(offset, offset + pageSize - 1)
-      .ilike('post_category', searchTerm, { caseSensitive: false }));
-  }
+      .select('*')
+      .order('post_category', { ascending: true });
 
-  if (error) {
+    if (error) {
+      console.error('Error fetching categories:', error);
+      return [];
+    }
+
+    const startIndex = (page - 1) * categoriesPerPage;
+    let endIndex = startIndex + categoriesPerPage;
+    if (endIndex > data.length) {
+      endIndex = data.length;
+    }
+    const categoriesForRequestedPage = data.slice(startIndex, endIndex);
+    return categoriesForRequestedPage.map((item) => item.post_category.toLowerCase()).filter(category => category !== null);
+  } catch (error) {
     console.error('Error fetching categories:', error);
     return [];
   }
-
-  return data.map((item) => item.post_category).filter(category => category !== null);
 };
 
-const fetchPostsByCategory = async (categoryName, page, pageSize) => {
-    try {
-        const offset = (page - 1) * pageSize;
-        let query = supabase.from('tools').select('*').range(offset, offset + pageSize - 1);
-    
-        if (categoryName === 'Freebies') {
-          const { data: allPosts, error } = await query.order('post_view', { ascending: false });
-    
-          if (error) {
-            console.error('Error fetching posts:', error);
-            return [];
-          } else {
-            const freeItems = allPosts.filter(
-              (post) => post.post_price === 'Free' || post.post_price === 'Freemium'
-            );
-            const otherItems = allPosts.filter(
-              (post) => post.post_price !== 'Free' && post.post_price !== 'Freemium'
-            );
-            const modifiedFreeItems = freeItems.map((item) => ({ ...item, post_category: 'Freebies' }));
-            return [...otherItems, ...modifiedFreeItems];
-          }
-        } else {
-          query = query.eq('post_category', categoryName);
-          const { data: posts, error } = await query.order('post_view', { ascending: false });
-    
-          if (error) {
-            console.error('Error fetching posts:', error);
-            return [];
-          } else {
-            return posts;
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching posts:', error);
-        return [];
+const fetchPostsByCategory = async (categoryName, page) => {
+  const postsPerPage = 6; // Constant posts per page
+  try {
+    let { data: allPosts, error } = await supabase
+      .from(categoryName === 'freebies' ? 'free_tools' : 'tools')
+      .select('*')
+      .eq(categoryName === 'freebies' ? 'post_category' : 'post_category', categoryName)
+      .order('post_view', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching posts:', error);
+      return [];
+    }
+
+    if (categoryName === 'freebies') {
+      const { data: freeItems, error: freeItemsError } = await supabase
+        .from('free_tools')
+        .select('*')
+        .order('post_view', { ascending: false });
+
+      if (freeItemsError) {
+        console.error('Error fetching free items:', freeItemsError);
+      } else {
+        allPosts = [...allPosts, ...freeItems];
       }
-    };
+    }
+
+    const startIndex = (page - 1) * postsPerPage;
+    let endIndex = startIndex + postsPerPage;
+    if (endIndex > allPosts.length) {
+      endIndex = allPosts.length;
+    }
+    const postsForRequestedPage = allPosts.slice(startIndex, endIndex);
+    return postsForRequestedPage
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    return [];
+  }
+};
 
 const fetchPostById = async (postId) => {
     try {
@@ -121,26 +123,20 @@ const fetchPostById = async (postId) => {
       }
     };
 
-const fetchPopularPosts = async (categoryName, limit = 4) => {
-    try {
-        let query = supabase.from('tools').select('*');
+    const fetchPopularPosts = async (categoryName, limit = 5) => {
+      try {
+        let query = supabase
+          .from(categoryName === 'freebies' ? 'free_tools' : 'tools')
+          .select('*')
+          .order('post_view', { ascending: false });
     
-        if (categoryName !== 'Freebies') {
-          query = query.eq('post_category', categoryName).order('post_view', { ascending: false }).limit(limit);
+        if (categoryName === 'freebies') {
+          query = supabase.from('free_tools').select('*');
         } else {
-          const { data: freeItems, error: freeItemsError } = await supabase
-            .from('tools')
-            .select('*')
-            .in('post_price', ['Free', 'Freemium'])
-            .order('post_view', { ascending: false });
-    
-          if (freeItemsError) {
-            console.error('Error retrieving popular free items:', freeItemsError);
-            return [];
-          }
-    
-          return freeItems.slice(0, limit);
+          query = query.eq('post_category', categoryName);
         }
+    
+        query = query.limit(limit);
     
         const { data: popularPosts, error } = await query;
     
@@ -154,7 +150,7 @@ const fetchPopularPosts = async (categoryName, limit = 4) => {
         console.error('Error retrieving popular posts:', error);
         return [];
       }
-};
+    };
 
 // Route Handlers
 app.get('/allCategories', async (req, res) => {
@@ -163,14 +159,14 @@ app.get('/allCategories', async (req, res) => {
 });
 
 app.get('/categories', async (req, res) => {
-  const { page, pageSize, searchInput } = req.query;
-  const categories = await retrieveCategoriesFromSupabase(page, pageSize, searchInput);
+  const { page } = req.query;
+  const categories = await retrieveCategoriesFromSupabase(page);
   res.json(categories);
 });
 
 app.get('/postsByCategory', async (req, res) => {
-  const { categoryName, page, pageSize } = req.query;
-  const posts = await fetchPostsByCategory(categoryName, page, pageSize);
+  const { categoryName, page } = req.query;
+  const posts = await fetchPostsByCategory(categoryName, page);
   res.json(posts);
 });
 
@@ -226,7 +222,7 @@ app.post('/updatePostView/:postId', async (req, res) => {
 });
 
 
-const port = process.env.PORT || 5000;
+const port = process.env.PORT || 10000;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
