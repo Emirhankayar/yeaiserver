@@ -38,72 +38,6 @@ const retrieveAllCategoriesFromSupabase = async () => {
   }
 };
 
-const retrieveCategoriesFromSupabase = async (page) => {
-  const categoriesPerPage = 12;
-  try {
-    const { data, error } = await supabase
-      .from('distinct_categories')
-      .select('*')
-      .order('post_category', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching categories:', error);
-      return [];
-    }
-
-    const startIndex = (page - 1) * categoriesPerPage;
-    let endIndex = startIndex + categoriesPerPage;
-    if (endIndex > data.length) {
-      endIndex = data.length;
-    }
-    const categoriesForRequestedPage = data.slice(startIndex, endIndex);
-    return categoriesForRequestedPage.map((item) => item.post_category.toLowerCase()).filter(category => category !== null);
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    return [];
-  }
-};
-
-const fetchPostsByCategory = async (categoryName, page) => {
-  const postsPerPage = 6; // Constant posts per page
-  try {
-    let { data: allPosts, error } = await supabase
-      .from(categoryName === 'freebies' ? 'free_tools' : 'tools')
-      .select('*')
-      .eq(categoryName === 'freebies' ? 'post_category' : 'post_category', categoryName)
-      .order('post_view', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching posts:', error);
-      return [];
-    }
-
-    if (categoryName === 'freebies') {
-      const { data: freeItems, error: freeItemsError } = await supabase
-        .from('free_tools')
-        .select('*')
-        .order('post_view', { ascending: false });
-
-      if (freeItemsError) {
-        console.error('Error fetching free items:', freeItemsError);
-      } else {
-        allPosts = [...allPosts, ...freeItems];
-      }
-    }
-
-    const startIndex = (page - 1) * postsPerPage;
-    let endIndex = startIndex + postsPerPage;
-    if (endIndex > allPosts.length) {
-      endIndex = allPosts.length;
-    }
-    const postsForRequestedPage = allPosts.slice(startIndex, endIndex);
-    return postsForRequestedPage
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    return [];
-  }
-};
-
 const fetchPostById = async (postId) => {
     try {
         const { data: post, error } = await supabase
@@ -159,15 +93,59 @@ app.get('/allCategories', async (req, res) => {
 });
 
 app.get('/categories', async (req, res) => {
-  const { page } = req.query;
-  const categories = await retrieveCategoriesFromSupabase(page);
-  res.json(categories);
+  const { offset, limit } = req.query;
+
+  try {
+    const { data, error } = await supabase
+      .from('distinct_categories')
+      .select('post_category')
+      .not('post_category', 'is', null) // Exclude null values
+      .order('post_category', { ascending: true, caseSensitive: false })
+      .range(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit) - 1);
+
+    if (error) {
+      res.status(500).json({ error: 'Error fetching data from Supabase' });
+    }
+
+    res.status(200).json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching data from Supabase' });
+  }
 });
 
 app.get('/postsByCategory', async (req, res) => {
-  const { categoryName, page } = req.query;
-  const posts = await fetchPostsByCategory(categoryName, page);
-  res.json(posts);
+  const { categoryName, offset, limit } = req.query;
+
+  try {
+    let { data: allPosts, error } = await supabase
+      .from('tools')
+      .select('*')
+      .eq('post_category', categoryName)
+      .order('post_view', { ascending: false })
+      .range(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit) - 1);
+
+    if (error) {
+      res.status(500).json({ error: 'Error fetching posts' });
+    }
+
+    if (categoryName === 'freebies') {
+      const { data: freeItems, error: freeItemsError } = await supabase
+        .from('free_tools')
+        .select('*')
+        .order('post_view', { ascending: false })
+        .range(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit) - 1);
+
+      if (freeItemsError) {
+        res.status(500).json({ error: 'Error fetching free items' });
+      } else {
+        allPosts = [...allPosts, ...freeItems];
+      }
+    }
+
+    res.status(200).json(allPosts);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching posts' });
+  }
 });
 
 app.get('/postById/:postId', async (req, res) => {
