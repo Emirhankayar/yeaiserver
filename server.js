@@ -93,18 +93,43 @@ app.get('/allCategories', async (req, res) => {
 });
 
 app.get('/categories', async (req, res) => {
-  const { offset, limit } = req.query;
+  const { offset, limit, search } = req.query;
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('distinct_categories')
       .select('post_category')
       .not('post_category', 'is', null) // Exclude null values
-      .order('post_category', { ascending: true, caseSensitive: false })
+      .order('post_category', { ascending: true, caseSensitive: false });
+
+    // If a search term is provided, filter the categories
+    if (search) {
+      query = query.ilike('post_category', `%${search}%`);
+    }
+
+    const { data, error } = await query
       .range(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit) - 1);
 
     if (error) {
       res.status(500).json({ error: 'Error fetching data from Supabase' });
+    }
+
+    // If a search term is provided, sort the categories by relevance
+    if (search) {
+      data.sort((a, b) => {
+        const indexA = a.post_category.toLowerCase().indexOf(search.toLowerCase());
+        const indexB = b.post_category.toLowerCase().indexOf(search.toLowerCase());
+
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        } else if (indexA !== -1) {
+          return -1;
+        } else if (indexB !== -1) {
+          return 1;
+        } else {
+          return 0;
+        }
+      });
     }
 
     res.status(200).json(data);
