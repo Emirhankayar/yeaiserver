@@ -7,6 +7,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors()); // Enable CORS for all routes
+app.use(express.json()); // Parse JSON bodies
 
 const supabaseUrl = process.env.VITE_DB_URL;
 const supabaseKey = process.env.VITE_DB_KEY;
@@ -221,6 +222,106 @@ app.post('/updatePostView/:postId', async (req, res) => {
   } catch (error) {
     console.error('Error updating post view:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+app.put('/updateBookmark', async (req, res) => {
+  const { userEmail, postId } = req.body;
+
+  try {
+    // Fetch the user
+    let { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('user_bookmarked')
+      .eq('email', userEmail)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Check if user_bookmarked includes postId
+    let userBookmarked = user.user_bookmarked ?? [];
+    if (userBookmarked.includes(postId)) {
+      res.status(200).json({ message: 'Post already bookmarked' });
+      return;
+    }
+
+    // Append the postId to the user_bookmarked array
+    let updatedBookmarks = [...userBookmarked, postId];
+
+    // Update the user
+    let { data, error } = await supabase
+      .from('users')
+      .update({ user_bookmarked: updatedBookmarks })
+      .eq('email', userEmail);
+
+    if (error) throw error;
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error('Error updating bookmark:', error);
+    res.status(500).json({ error: 'Error updating bookmark' });
+  }
+});
+
+app.delete('/removeBookmark', async (req, res) => {
+  const { userEmail, postId } = req.body;
+
+  try {
+    // Fetch the user
+    let { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('user_bookmarked')
+      .eq('email', userEmail)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    console.log('Before filter:', user.user_bookmarked);
+
+    // Remove the postId from the user_bookmarked array
+    let updatedBookmarks = user.user_bookmarked?.filter(id => String(id) !== String(postId)) ?? [];
+
+    console.log('After filter:', updatedBookmarks);
+
+    // Update the user
+    let { data, error } = await supabase
+      .from('users')
+      .update({ user_bookmarked: updatedBookmarks })
+      .eq('email', userEmail);
+
+    if (error) throw error;
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error('Error removing bookmark:', error);
+    res.status(500).json({ error: 'Error removing bookmark' });
+  }
+});
+
+app.get('/getBookmarks', async (req, res) => {
+  const { email } = req.query; // change userEmail to email
+  console.log('Email:', email);
+
+  try {
+    // Fetch the user
+    let { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('user_bookmarked')
+      .eq('email', email) // change userEmail to email
+      .maybeSingle();
+
+    if (fetchError || !user) {
+      console.error('Error fetching user:', fetchError);
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Return the user_bookmarked array
+    res.status(200).json({ email, bookmarks: user.user_bookmarked ?? [] }); // change userEmail to email
+  } catch (error) {
+    console.error('Error fetching bookmarks:', error);
+    res.status(500).json({ error: 'Error fetching bookmarks' });
   }
 });
 
