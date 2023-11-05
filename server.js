@@ -354,6 +354,21 @@ app.get('/getBookmarkPosts', async (req, res) => {
   }
 });
 
+app.get('/postImage/:postId', async (req, res) => {
+  const postId = req.params.postId;
+  const { data, error } = await supabase.storage.from('favicons').download(`${postId}.png`);
+
+  if (error) {
+    console.error('Error fetching image: ', error);
+    res.status(500).send('Error fetching image');
+    return;
+  }
+
+  const url = URL.createObjectURL(data);
+  res.send(url);
+});
+
+
 const port = process.env.PORT || 10000;
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
