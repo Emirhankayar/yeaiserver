@@ -61,17 +61,11 @@ const fetchPostById = async (postId) => {
     const fetchPopularPosts = async (categoryName, limit = 5) => {
       try {
         let query = supabase
-          .from(categoryName === 'freebies' ? 'free_tools' : 'tools')
+          .from('tools')
           .select('*')
-          .order('post_view', { ascending: false });
-    
-        if (categoryName === 'freebies') {
-          query = supabase.from('free_tools').select('*');
-        } else {
-          query = query.eq('post_category', categoryName);
-        }
-    
-        query = query.limit(limit);
+          .order('post_view', { ascending: false })
+          .eq('post_category', categoryName)
+          .limit(limit);
     
         const { data: popularPosts, error } = await query;
     
@@ -86,6 +80,32 @@ const fetchPostById = async (postId) => {
         return [];
       }
     };
+
+    app.get('/trendingPosts', async (req, res) => {
+      const { categoryName, limit = 50 } = req.query;
+    
+      try {
+        let query = supabase
+          .from('tools')
+          .select('*')
+          .order('post_view', { ascending: false })
+          .eq('post_category', categoryName)
+          .limit(limit);
+    
+        const { data: popularPosts, error } = await query;
+    
+        if (error) {
+          console.error('Error retrieving popular posts:', error);
+          res.status(500).json({ error: 'Error fetching trending posts' });
+          return;
+        }
+    
+        res.status(200).json(popularPosts.slice(0, limit));
+      } catch (error) {
+        console.error('Error retrieving popular posts:', error);
+        res.status(500).json({ error: 'Error fetching trending posts' });
+      }
+    });
 
 // Route Handlers
 app.get('/allCategories', async (req, res) => {
@@ -143,7 +163,7 @@ app.get('/postsByCategory', async (req, res) => {
   const { categoryName, offset, limit } = req.query;
 
   try {
-    let { data: allPosts, error } = await supabase
+    const { data: allPosts, error } = await supabase
       .from('tools')
       .select('*')
       .eq('post_category', categoryName)
@@ -152,20 +172,6 @@ app.get('/postsByCategory', async (req, res) => {
 
     if (error) {
       res.status(500).json({ error: 'Error fetching posts' });
-    }
-
-    if (categoryName === 'freebies') {
-      const { data: freeItems, error: freeItemsError } = await supabase
-        .from('free_tools')
-        .select('*')
-        .order('post_view', { ascending: false })
-        .range(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit) - 1);
-
-      if (freeItemsError) {
-        res.status(500).json({ error: 'Error fetching free items' });
-      } else {
-        allPosts = [...allPosts, ...freeItems];
-      }
     }
 
     res.status(200).json(allPosts);
