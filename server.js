@@ -82,14 +82,13 @@ const fetchPostById = async (postId) => {
     };
 
     app.get('/trendingPosts', async (req, res) => {
-      const { categoryName, limit = 50 } = req.query;
+      const { limit = 50 } = req.query;
     
       try {
         let query = supabase
           .from('tools')
           .select('*')
           .order('post_view', { ascending: false })
-          .eq('post_category', categoryName)
           .limit(limit);
     
         const { data: popularPosts, error } = await query;
