@@ -82,7 +82,7 @@ const fetchPostById = async (postId) => {
     };
 
     app.get('/trendingPosts', async (req, res) => {
-      const { limit = 50 } = req.query;
+      const { limit = 10 } = req.query;
     
       try {
         let query = supabase
@@ -356,16 +356,19 @@ app.get('/getBookmarkPosts', async (req, res) => {
 
 app.get('/postImage/:postId', async (req, res) => {
   const postId = req.params.postId;
-  const { data, error } = await supabase.storage.from('favicons').download(`${postId}.png`);
+  const { data, error } = supabase.storage.from('favicons').getPublicUrl(`${postId}.png`);
 
   if (error) {
     console.error('Error fetching image: ', error);
-    res.status(500).send('Error fetching image');
+    if (error.message.includes('not found')) {
+      res.status(204).send(); // Send 204 status if image not found
+    } else {
+      res.status(500).send('Error fetching image');
+    }
     return;
   }
 
-  const url = URL.createObjectURL(data);
-  res.send(url);
+  res.send(data);
 });
 
 
