@@ -325,6 +325,29 @@ app.get('/getBookmarks', async (req, res) => {
   }
 });
 
+app.get('/getBookmarkPosts', async (req, res) => {
+  let { ids } = req.query;
+  let idArray = JSON.parse(ids);
+
+  // Convert ids to numbers
+  idArray = idArray.map(id => Number(id));
+
+  try {
+    // Fetch the posts
+    const { data: posts, error: postsError } = await supabase
+      .from('tools')
+      .select('*')
+      .in('id', idArray);
+
+    if (postsError) throw postsError;
+
+    // Return the posts
+    res.status(200).json({ posts });
+  } catch (error) {
+    console.error('Error fetching posts:', error);
+    res.status(500).json({ error: 'Error fetching posts' });
+  }
+});
 
 const port = process.env.PORT || 10000;
 app.listen(port, () => {
