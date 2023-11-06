@@ -19,7 +19,7 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Route Handlers
-app.get('/allCategories', async (req, res) => {
+const retrieveAllCategoriesFromSupabase = async () => {
   try {
     const { data, error } = await supabase
       .from('distinct_categories')
@@ -28,16 +28,20 @@ app.get('/allCategories', async (req, res) => {
 
     if (error) {
       console.error('Error fetching categories:', error);
-      res.json([]);
-      return;
+      return [];
     }
 
     const categories = data.map((item) => item.post_category).filter(category => category !== null);
-    res.json(categories);
+    return categories;
   } catch (error) {
     console.error('Error fetching distinct categories:', error.message);
-    res.json([]);
+    return [];
   }
+};
+
+app.get('/allCategories', async (req, res) => {
+  const categories = await retrieveAllCategoriesFromSupabase();
+  res.json(categories);
 });
 
     app.get('/trendingPosts', async (req, res) => {
@@ -86,6 +90,43 @@ app.get('/postsByCategory', async (req, res) => {
     res.status(500).json({ error: 'Error fetching posts' });
   }
 });
+
+
+
+
+
+
+
+
+app.put('/updatePostView', async (req, res) => {
+  const { postId, post_view } = req.body;
+
+  try {
+    const updatedView = (post_view || 0) + 1;
+
+    const { error } = await supabase
+      .from('tools')
+      .update({ post_view: updatedView })
+      .eq('id', postId);
+
+    if (error) {
+      console.error('Error updating post view:', error);
+      res.status(500).json({ error: 'Error updating post view' });
+      return;
+    }
+
+    res.status(200).json({ message: 'Post view updated successfully' });
+  } catch (error) {
+    console.error('Error updating post view:', error);
+    res.status(500).json({ error: 'Error updating post view' });
+  }
+});
+
+
+
+
+
+
 
 
 app.put('/updateBookmark', async (req, res) => {
@@ -139,12 +180,10 @@ app.delete('/removeBookmark', async (req, res) => {
 
     if (fetchError) throw fetchError;
 
-    console.log('Before filter:', user.user_bookmarked);
 
     // Remove the postId from the user_bookmarked array
     let updatedBookmarks = user.user_bookmarked?.filter(id => String(id) !== String(postId)) ?? [];
 
-    console.log('After filter:', updatedBookmarks);
 
     // Update the user
     let { data, error } = await supabase
@@ -163,7 +202,6 @@ app.delete('/removeBookmark', async (req, res) => {
 
 app.get('/getBookmarks', async (req, res) => {
   const { email } = req.query; // change userEmail to email
-  console.log('Email:', email);
 
   try {
     // Fetch the user
