@@ -251,18 +251,22 @@ app.get('/getBookmarkPosts', async (req, res) => {
 
 app.get('/postImage/:postId', async (req, res) => {
   const postId = req.params.postId;
-  const { data, error } = supabase.storage.from('favicons').getPublicUrl(`${postId}.png`);
-
-  if (error) {
-    console.error('Error fetching image: ', error);
-    if (error.message.includes('not found')) {
-      res.status(204).send(); // Send 204 status if image not found
-    } else {
-      res.status(500).send('Error fetching image');
-    }
+  
+  const { data: imageData, error: imageError } = await supabase.storage.from('images').getPublicUrl(`${postId}.webp`);
+  if (imageError) {
+    console.error('Error fetching image: ', imageError);
+    res.status(500).send('Error fetching image');
     return;
   }
 
+  const { data: iconData, error: iconError } = await supabase.storage.from('favicons').getPublicUrl(`${postId}.png`);
+  if (iconError) {
+    console.error('Error fetching icon: ', iconError);
+    res.status(500).send('Error fetching icon');
+    return;
+  }
+
+  const data = { image: imageData, icon: iconData };
   res.send(data);
 });
 
