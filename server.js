@@ -355,8 +355,8 @@ console.log(data[0]);
       <p>${post_category}</p>
       <p>${post_price}</p>
       <p>${post_description}</p>
-      <a href="http://localhost:5173/approve-tool?toolId=${toolId}&pending=approved" style="background-color: #4CAF50; color: white; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 12px;">Approve</a>
-      <a href="http://localhost:5173/approve-tool?toolId=${toolId}&pending=declined" style="background-color: #f44336; color: white; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 12px;">Decline</a>
+      <a href="https://yeai.tech/approve-tool?toolId=${toolId}&pending=approved" style="background-color: #4CAF50; color: white; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 12px;">Approve</a>
+      <a href="https://yeai.tech/approve-tool?toolId=${toolId}&pending=declined" style="background-color: #f44336; color: white; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 12px;">Decline</a>
     `
   };
 
