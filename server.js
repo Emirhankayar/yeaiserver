@@ -1,7 +1,9 @@
 const express = require('express');
-const { createClient, sql } = require('@supabase/supabase-js');
+const { createClient } = require('@supabase/supabase-js');
 const dotenv = require('dotenv');
-const cors = require('cors'); // Import the cors package
+const cors = require('cors');
+const nodemailer = require('nodemailer');
+
 
 dotenv.config();
 const app = express();
@@ -11,12 +13,25 @@ app.use(express.json()); // Parse JSON bodies
 
 const supabaseUrl = process.env.VITE_DB_URL;
 const supabaseKey = process.env.VITE_DB_KEY;
+const smtpHost = process.env.SMTP_HOST;
+const smtpPort = process.env.SMTP_PORT;
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error('Supabase URL and key are required in the .env file');
+if (!supabaseUrl || !supabaseKey || !smtpHost || !smtpPort || !smtpUser || !smtpPass) {
+  throw new Error('Supabase URL, key and SMTP credentials are required in the .env file');
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
+const transporter = nodemailer.createTransport({
+  host: smtpHost,
+  port: smtpPort,
+  auth: {
+    user: smtpUser,
+    pass: smtpPass
+  }
+});
+const { v4: uuidv4 } = require('uuid');
 
 // Route Handlers
 const retrieveAllCategoriesFromSupabase = async () => {
@@ -269,6 +284,147 @@ app.get('/postImage/:postId', async (req, res) => {
   const data = { image: imageData, icon: iconData };
   res.send(data);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+app.post('/send-email', async (req, res) => {
+  console.log('Request body:', req.body);
+
+  const { email, post_link, post_category, post_description, post_price, post_title } = req.body;
+  const toolId = uuidv4(); // Generate a unique id for the tool
+
+  const { error: insertError } = await supabase
+  .from('email')
+  .insert([{ id: toolId, email, post_link, post_category, post_description, post_price, post_title }]);
+
+if (insertError) {
+  console.log('Database error:', insertError.message);
+  return res.status(500).json({ error: insertError.message });
+}
+
+// Now, when you want to refer to this record, use the toolId
+const { data, error: selectError } = await supabase
+  .from('email')
+  .select('*')
+  .eq('id', toolId);
+
+if (selectError) {
+  console.log('Database error:', selectError.message);
+  return res.status(500).json({ error: selectError.message });
+}
+
+// Now data[0] will contain the record with the specific toolId
+console.log(data[0]);
+
+
+  const emailData = {
+    from: 'Yeai <noreply@yeai.tech>',
+    to: email,
+    subject: 'Submission received',
+    text: 'Your tool submission is successful. We will further inspect it.'
+  };
+
+  const adminEmailData = {
+    from: 'Yeai <noreply@yeai.tech>',
+    to: 'emirhan.kayar80@gmail.com', // replace with the admin's email
+    subject: 'New tool submitted',
+    html: `
+      <p>A new tool has been submitted for review.</p>
+      <p>Details:</p>
+      <p>${email}</p>
+      <p>${post_title}</p>
+      <p>${post_link}</p>
+      <p>${post_category}</p>
+      <p>${post_price}</p>
+      <p>${post_description}</p>
+      <a href="http://localhost:5173/approve-tool?toolId=${toolId}&pending=approved" style="background-color: #4CAF50; color: white; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 12px;">Approve</a>
+      <a href="http://localhost:5173/approve-tool?toolId=${toolId}&pending=declined" style="background-color: #f44336; color: white; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 12px;">Decline</a>
+    `
+  };
+
+  transporter.sendMail(emailData)
+    .then(() => transporter.sendMail(adminEmailData))
+    .then(() => res.status(200).json({ data }))
+    .catch((err) => {
+      console.log('SMTP error:', err.message);
+      res.status(500).json({ error: err.message });
+    });
+});
+
+app.get('/update-tool-status', async (req, res) => {
+  console.log(req.query); 
+
+  const { toolId, pending } = req.query;
+
+  let { error } = await supabase
+  .from('email')
+  .update({ status: pending })
+  .eq('id', toolId);
+
+if (error) {
+  return res.status(500).send(`An error occurred: ${error.message}`);
+}
+
+let { data, error: fetchError } = await supabase
+  .from('email')
+  .select('*')
+  .eq('id', toolId);
+
+if (fetchError) {
+  return res.status(500).send(`An error occurred: ${fetchError.message}`);
+}
+
+if (pending === 'approved') {
+  console.log('Data before insert into tools:', data);
+  try {
+    const { id, ...toolData } = data[0]; // Destructure id from data[0]
+    const { data: insertedToolData, error: toolError } = await supabase
+      .from('tools')
+      .insert([{ email_id: toolId, ...toolData }]); // Spread the remaining fields
+
+    if (toolError) {
+      console.log('Error inserting into tools:', toolError.message);
+      return res.status(500).send(`An error occurred: ${toolError.message}`);
+    }
+  } catch (err) {
+    console.error('Unexpected error when inserting into tools:', err);
+    return res.status(500).send(`An unexpected error occurred: ${err.message}`);
+  }
+}
+  else if (pending === 'declined') {
+    const { data: declinedData, error: declinedError } = await supabase
+    .from('email')
+    .update({ status: 'declined' })
+    .eq('id', toolId);
+
+    if (declinedError) {
+      return res.status(500).send(`An error occurred: ${declinedError.message}`);
+    }
+  }
+
+  return res.send(`Tool has been ${pending}`);
+});
+
+
+
 
 
 const port = process.env.PORT || 10000;
