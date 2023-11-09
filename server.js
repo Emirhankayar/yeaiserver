@@ -84,28 +84,43 @@ app.get('/allCategories', async (req, res) => {
       }
     });
 
-
-app.get('/postsByCategory', async (req, res) => {
-  const { categoryName, offset, limit } = req.query;
-
-  try {
-    const { data: allPosts, error } = await supabase
-      .from('tools')
-      .select('*')
-      .eq('post_category', categoryName)
-      .order('post_view', { ascending: false })
-      .range(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit) - 1);
-
-    if (error) {
-      res.status(500).json({ error: 'Error fetching posts' });
-    }
-
-    res.status(200).json(allPosts);
-  } catch (error) {
-    res.status(500).json({ error: 'Error fetching posts' });
-  }
-});
-
+    app.get('/postsByCategory', async (req, res) => {
+      const { categoryName, offset, limit, searchTerm, sortBy, sortOrder, filterBy } = req.query;
+    
+      try {
+        let query = supabase.from('tools').select('*');
+    
+        if (categoryName) {
+          query = query.eq('post_category', categoryName);
+        } 
+    
+        if (searchTerm) {
+          query = query.ilike('post_title', `%${searchTerm}%`); // Filter posts by title
+        }
+    
+        if (sortBy) {
+          query = query.order(sortBy, { ascending: sortOrder === 'asc' }); // Sort posts
+        }
+    
+        if (filterBy) {
+          query = query.eq('post_price', filterBy); // Filter posts by price
+        }
+    
+        const { data: allPosts, error } = await query;
+    
+        if (error) {
+          return res.status(500).json({ error: 'Error fetching posts' });
+        }
+    
+        const totalPosts = allPosts.length;
+    
+        const posts = allPosts.slice(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit));
+    
+        return res.status(200).json({ posts, totalPosts });
+      } catch (error) {
+        return res.status(500).json({ error: 'Error fetching posts' });
+      }
+    });
 
 
 
