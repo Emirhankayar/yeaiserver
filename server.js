@@ -116,11 +116,35 @@ app.get('/allCategories', async (req, res) => {
     
         const posts = allPosts.slice(parseInt(offset) * parseInt(limit), (parseInt(offset) + 1) * parseInt(limit));
     
+        // Fetch image URLs for each post
+        for (let post of posts) {
+          const { data: imageData, error: imageError } = await supabase.storage.from('images').getPublicUrl(`${post.id}.webp`);
+          if (imageError) {
+            console.error('Error fetching image: ', imageError);
+            return res.status(500).json({ error: 'Error fetching image' });
+          }
+    
+          const { data: iconData, error: iconError } = await supabase.storage.from('favicons').getPublicUrl(`${post.id}.png`);
+          if (iconError) {
+            console.error('Error fetching icon: ', iconError);
+            return res.status(500).json({ error: 'Error fetching icon' });
+          }
+    
+          post.image = imageData;
+          post.icon = iconData;
+        }
+    
         return res.status(200).json({ posts, totalPosts });
       } catch (error) {
         return res.status(500).json({ error: 'Error fetching posts' });
       }
     });
+
+
+
+    
+    
+    
 
 
 
@@ -278,29 +302,6 @@ app.get('/getBookmarkPosts', async (req, res) => {
     res.status(500).json({ error: 'Error fetching posts' });
   }
 });
-
-app.get('/postImage/:postId', async (req, res) => {
-  const postId = req.params.postId;
-  
-  const { data: imageData, error: imageError } = await supabase.storage.from('images').getPublicUrl(`${postId}.webp`);
-  if (imageError) {
-    console.error('Error fetching image: ', imageError);
-    res.status(500).send('Error fetching image');
-    return;
-  }
-
-  const { data: iconData, error: iconError } = await supabase.storage.from('favicons').getPublicUrl(`${postId}.png`);
-  if (iconError) {
-    console.error('Error fetching icon: ', iconError);
-    res.status(500).send('Error fetching icon');
-    return;
-  }
-
-  const data = { image: imageData, icon: iconData };
-  res.send(data);
-});
-
-
 
 
 
