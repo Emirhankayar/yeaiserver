@@ -314,12 +314,23 @@ app.get('/getBookmarkPosts', async (req, res) => {
 
 
 
+app.post('/report-issue', async (req, res) => {
+  const { post, message, email } = req.body;
 
+  const emailData = {
+    from: email,
+    to: 'emirhan.kayar80@gmail.com', // replace with your email
+    subject: `Report for post: ${post}`,
+    text: message
+  };
 
-
-
-
-
+  transporter.sendMail(emailData)
+    .then(() => res.status(200).json({ message: 'Report sent successfully' }))
+    .catch((err) => {
+      console.log('SMTP error:', err.message);
+      res.status(500).json({ error: err.message });
+    });
+});
 
 app.post('/send-email', async (req, res) => {
   console.log('Request body:', req.body);
