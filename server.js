@@ -222,6 +222,30 @@ app.put('/toggleBookmark', async (req, res) => {
   }
 });
 
+app.get('/getBookmarks', async (req, res) => {
+  const { email } = req.query; // change userEmail to email
+
+  try {
+    // Fetch the user
+    let { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('user_bookmarked')
+      .eq('email', email) // change userEmail to email
+      .maybeSingle();
+
+    if (fetchError || !user) {
+      console.error('Error fetching user:', fetchError);
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    // Return the user_bookmarked array
+    res.status(200).json({ email, bookmarks: user.user_bookmarked ?? [] }); // change userEmail to email
+  } catch (error) {
+    console.error('Error fetching bookmarks:', error);
+    res.status(500).json({ error: 'Error fetching bookmarks' });
+  }
+});
 
 app.get('/getPosts', async (req, res) => {
   let { ids, email, bookmarkedPage, addedPage, limit } = req.query;
