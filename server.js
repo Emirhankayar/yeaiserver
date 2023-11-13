@@ -249,9 +249,9 @@ app.get('/getBookmarks', async (req, res) => {
 
 app.get('/getPosts', async (req, res) => {
   let { ids, email, bookmarkedPage, addedPage, limit } = req.query;
+
   let idArray = JSON.parse(ids);
-  bookmarkedPage = Number(bookmarkedPage);
-  addedPage = Number(addedPage);
+  page = Number(page);
   limit = Number(limit);
 
   // Convert ids to numbers
@@ -292,6 +292,9 @@ app.get('/getPosts', async (req, res) => {
 
 
 
+
+
+
 app.post('/report-issue', async (req, res) => {
   const { post, message, email } = req.body;
 
@@ -318,7 +321,7 @@ app.post('/send-email', async (req, res) => {
 
   const { error: insertError } = await supabase
   .from('email')
-  .insert([{ id: toolId, email, post_link, post_category, post_description, post_price, post_title }]);
+  .insert([{ uuid: toolId, email, post_link, post_category, post_description, post_price, post_title }]);
 
 if (insertError) {
   console.log('Database error:', insertError.message);
@@ -329,7 +332,7 @@ if (insertError) {
 const { data, error: selectError } = await supabase
   .from('email')
   .select('*')
-  .eq('id', toolId);
+  .eq('uuid', toolId);
 
 if (selectError) {
   console.log('Database error:', selectError.message);
@@ -378,7 +381,7 @@ app.get('/update-tool-status', async (req, res) => {
   let { error } = await supabase
   .from('email')
   .update({ status: pending })
-  .eq('id', toolId);
+  .eq('uuid', toolId);
 
 if (error) {
   return res.status(500).send(`An error occurred: ${error.message}`);
@@ -387,7 +390,7 @@ if (error) {
 let { data, error: fetchError } = await supabase
   .from('email')
   .select('*')
-  .eq('id', toolId);
+  .eq('uuid', toolId);
 
 if (fetchError) {
   return res.status(500).send(`An error occurred: ${fetchError.message}`);
@@ -396,17 +399,20 @@ if (fetchError) {
 if (pending === 'approved') {
   console.log('Data before insert into tools:', data);
   try {
-    const { id, ...toolData } = data[0]; // Destructure id from data[0]
+    const { uuid, ...toolData } = data[0]; // Destructure uuid from data[0]
+    console.log('Inserting tool data:', toolData); // Log the data being inserted
     const { data: insertedToolData, error: toolError } = await supabase
       .from('tools')
       .insert([{ email_id: toolId, ...toolData }]); // Spread the remaining fields
 
     if (toolError) {
       console.log('Error inserting into tools:', toolError.message);
+      console.log('Failed tool data:', toolData); // Log the data that failed to insert
       return res.status(500).send(`An error occurred: ${toolError.message}`);
     }
   } catch (err) {
     console.error('Unexpected error when inserting into tools:', err);
+    console.error('Failed tool data:', toolData); // Log the data that caused the error
     return res.status(500).send(`An unexpected error occurred: ${err.message}`);
   }
 }
@@ -414,7 +420,7 @@ if (pending === 'approved') {
     const { data: declinedData, error: declinedError } = await supabase
     .from('email')
     .update({ status: 'declined' })
-    .eq('id', toolId);
+    .eq('uuid', toolId);
 
     if (declinedError) {
       return res.status(500).send(`An error occurred: ${declinedError.message}`);
