@@ -183,7 +183,7 @@ app.put('/updatePostView', async (req, res) => {
 
 
 
-app.put('/updateBookmark', async (req, res) => {
+app.put('/toggleBookmark', async (req, res) => {
   const { userEmail, postId } = req.body;
 
   try {
@@ -198,13 +198,14 @@ app.put('/updateBookmark', async (req, res) => {
 
     // Check if user_bookmarked includes postId
     let userBookmarked = user.user_bookmarked ?? [];
+    let updatedBookmarks;
     if (userBookmarked.includes(postId)) {
-      res.status(200).json({ message: 'Post already bookmarked' });
-      return;
+      // Remove the postId from the user_bookmarked array
+      updatedBookmarks = userBookmarked.filter(id => String(id) !== String(postId));
+    } else {
+      // Append the postId to the user_bookmarked array
+      updatedBookmarks = [...userBookmarked, postId];
     }
-
-    // Append the postId to the user_bookmarked array
-    let updatedBookmarks = [...userBookmarked, postId];
 
     // Update the user
     let { data, error } = await supabase
@@ -216,87 +217,45 @@ app.put('/updateBookmark', async (req, res) => {
 
     res.status(200).json(data);
   } catch (error) {
-    console.error('Error updating bookmark:', error);
-    res.status(500).json({ error: 'Error updating bookmark' });
+    console.error('Error toggling bookmark:', error);
+    res.status(500).json({ error: 'Error toggling bookmark' });
   }
 });
 
-app.delete('/removeBookmark', async (req, res) => {
-  const { userEmail, postId } = req.body;
 
-  try {
-    // Fetch the user
-    let { data: user, error: fetchError } = await supabase
-      .from('users')
-      .select('user_bookmarked')
-      .eq('email', userEmail)
-      .single();
-
-    if (fetchError) throw fetchError;
-
-
-    // Remove the postId from the user_bookmarked array
-    let updatedBookmarks = user.user_bookmarked?.filter(id => String(id) !== String(postId)) ?? [];
-
-
-    // Update the user
-    let { data, error } = await supabase
-      .from('users')
-      .update({ user_bookmarked: updatedBookmarks })
-      .eq('email', userEmail);
-
-    if (error) throw error;
-
-    res.status(200).json(data);
-  } catch (error) {
-    console.error('Error removing bookmark:', error);
-    res.status(500).json({ error: 'Error removing bookmark' });
-  }
-});
-
-app.get('/getBookmarks', async (req, res) => {
-  const { email } = req.query; // change userEmail to email
-
-  try {
-    // Fetch the user
-    let { data: user, error: fetchError } = await supabase
-      .from('users')
-      .select('user_bookmarked')
-      .eq('email', email) // change userEmail to email
-      .maybeSingle();
-
-    if (fetchError || !user) {
-      console.error('Error fetching user:', fetchError);
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    // Return the user_bookmarked array
-    res.status(200).json({ email, bookmarks: user.user_bookmarked ?? [] }); // change userEmail to email
-  } catch (error) {
-    console.error('Error fetching bookmarks:', error);
-    res.status(500).json({ error: 'Error fetching bookmarks' });
-  }
-});
-
-app.get('/getBookmarkPosts', async (req, res) => {
-  let { ids } = req.query;
+app.get('/getPosts', async (req, res) => {
+  let { ids, email, bookmarkedPage, addedPage, limit } = req.query;
   let idArray = JSON.parse(ids);
+  bookmarkedPage = Number(bookmarkedPage);
+  addedPage = Number(addedPage);
+  limit = Number(limit);
 
   // Convert ids to numbers
   idArray = idArray.map(id => Number(id));
 
   try {
-    // Fetch the posts
-    const { data: posts, error: postsError } = await supabase
+    // Fetch all bookmarked posts
+    const { data: allBookmarkedPosts, error: bookmarkedPostsError } = await supabase
       .from('tools')
       .select('*')
       .in('id', idArray);
 
-    if (postsError) throw postsError;
+    if (bookmarkedPostsError) throw bookmarkedPostsError;
+
+    // Fetch all added posts
+    const { data: allAddedPosts, error: addedPostsError } = await supabase
+      .from('email')
+      .select('*')
+      .eq('email', email);
+
+    if (addedPostsError) throw addedPostsError;
+
+    // Manually paginate the results
+    const bookmarkedPosts = allBookmarkedPosts.slice((bookmarkedPage - 1) * limit, bookmarkedPage * limit);
+    const addedPosts = allAddedPosts.slice((addedPage - 1) * limit, addedPage * limit);
 
     // Return the posts
-    res.status(200).json({ posts });
+    res.status(200).json({ bookmarkedPosts, addedPosts, totalBookmarkedPosts: allBookmarkedPosts.length, totalAddedPosts: allAddedPosts.length });
   } catch (error) {
     console.error('Error fetching posts:', error);
     res.status(500).json({ error: 'Error fetching posts' });
@@ -309,17 +268,12 @@ app.get('/getBookmarkPosts', async (req, res) => {
 
 
 
-
-
-
-
-
 app.post('/report-issue', async (req, res) => {
   const { post, message, email } = req.body;
 
   const emailData = {
     from: email,
-    to: 'emirhan.kayar80@gmail.com', // replace with your email
+    to: 'emirhan.kayar80@gmail.com',
     subject: `Report for post: ${post}`,
     text: message
   };
@@ -357,10 +311,6 @@ if (selectError) {
   console.log('Database error:', selectError.message);
   return res.status(500).json({ error: selectError.message });
 }
-
-// Now data[0] will contain the record with the specific toolId
-console.log(data[0]);
-
 
   const emailData = {
     from: 'Yeai <noreply@yeai.tech>',
