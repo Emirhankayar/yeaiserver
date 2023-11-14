@@ -285,16 +285,43 @@ app.get('/getBookmarks', async (req, res) => {
       return;
     }
 
-    // Return the user object along with the bookmarked posts
-    res.status(200).json({ user, bookmarkedPosts: bookmarkedPostsDetails });
+    // Fetch the user added posts along with their status
+    let { data: userAddedPosts, error: userAddedPostsError } = await supabase
+      .from('user_added_posts')
+      .select('post_id, status') // Select post_id and status
+      .eq('user_id', userId);
+
+    if (userAddedPostsError) {
+      console.error('Error fetching user added posts:', userAddedPostsError);
+      res.status(500).json({ error: 'Error fetching user added posts' });
+      return;
+    }
+
+// Fetch the full details of the user added posts
+let { data: userAddedPostsDetails, error: postsDetailsError } = await supabase
+  .from('tools')
+  .select('*')
+  .in('id', userAddedPosts.map(post => post.post_id));
+
+if (postsDetailsError) {
+  console.error('Error fetching user added posts:', postsDetailsError);
+  res.status(500).json({ error: 'Error fetching user added posts' });
+  return;
+}
+
+    // Merge the status into the user added post details
+    const userAddedPostsWithStatus = userAddedPostsDetails.map(post => ({
+      ...post,
+      status: userAddedPosts.find(userPost => userPost.post_id === post.id).status,
+    }));
+
+    // Return the user object along with the bookmarked posts and user added posts
+    res.status(200).json({ user, bookmarkedPosts: bookmarkedPostsDetails, userAddedPosts: userAddedPostsWithStatus });
   } catch (error) {
-    console.error('Error fetching bookmarks:', error);
-    res.status(500).json({ error: 'Error fetching bookmarks' });
+    console.error('Error fetching bookmarks and user added posts:', error);
+    res.status(500).json({ error: 'Error fetching bookmarks and user added posts' });
   }
 });
-
-
-
 
 
 
@@ -394,11 +421,11 @@ app.get('/update-tool-status', async (req, res) => {
   }
 
   if (pending === 'approved') {
-    const { user_id, post_id, ...toolData } = data[0]; // Destructure user_id and post_id from data[0]
+    const { user_id, post_id, status, ...toolData } = data[0]; // Destructure user_id, post_id and status from data[0]
     const { error: toolInsertError } = await supabase
       .from('tools')
       .insert([{ id: post_id, ...toolData }]); // Spread the remaining fields
-
+  
     if (toolInsertError) {
       console.log('Database error:', toolInsertError.message);
       return res.status(500).json({ error: toolInsertError.message });
