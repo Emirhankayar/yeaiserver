@@ -184,108 +184,114 @@ app.put('/updatePostView', async (req, res) => {
 
 
 app.put('/toggleBookmark', async (req, res) => {
-  const { userEmail, postId } = req.body;
+  const { userId, postId } = req.body;
 
   try {
-    // Fetch the user
-    let { data: user, error: fetchError } = await supabase
-      .from('users')
-      .select('user_bookmarked')
-      .eq('email', userEmail)
-      .single();
+    // Check if the bookmark already exists
+    let { data: existingBookmark, error: fetchError } = await supabase
+      .from('user_bookmarked_posts')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('post_id', postId)
+      .maybeSingle();
 
-    if (fetchError) throw fetchError;
-
-    // Check if user_bookmarked includes postId
-    let userBookmarked = user.user_bookmarked ?? [];
-    let updatedBookmarks;
-    if (userBookmarked.includes(postId)) {
-      // Remove the postId from the user_bookmarked array
-      updatedBookmarks = userBookmarked.filter(id => String(id) !== String(postId));
-    } else {
-      // Append the postId to the user_bookmarked array
-      updatedBookmarks = [...userBookmarked, postId];
+    if (fetchError) {
+      console.error('Error fetching bookmark:', fetchError);
+      res.status(500).json({ error: 'Error fetching bookmark' });
+      return;
     }
 
-    // Update the user
-    let { data, error } = await supabase
-      .from('users')
-      .update({ user_bookmarked: updatedBookmarks })
-      .eq('email', userEmail);
+    if (existingBookmark) {
+      // If the bookmark exists, delete it
+      let { error: deleteError } = await supabase
+        .from('user_bookmarked_posts')
+        .delete()
+        .eq('user_id', userId)
+        .eq('post_id', postId);
 
-    if (error) throw error;
+      if (deleteError) {
+        console.error('Error deleting bookmark:', deleteError);
+        res.status(500).json({ error: 'Error deleting bookmark' });
+        return;
+      }
+    } else {
+      // If the bookmark doesn't exist, create it
+      let { error: insertError } = await supabase
+        .from('user_bookmarked_posts')
+        .insert([{ user_id: userId, post_id: postId }]);
 
-    res.status(200).json(data);
+      if (insertError) {
+        console.error('Error creating bookmark:', insertError);
+        res.status(500).json({ error: 'Error creating bookmark' });
+        return;
+      }
+    }
+
+    res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error toggling bookmark:', error);
     res.status(500).json({ error: 'Error toggling bookmark' });
   }
 });
 
+
+
+
+
+
 app.get('/getBookmarks', async (req, res) => {
-  const { email } = req.query; // change userEmail to email
+  const { userId } = req.query;
 
   try {
     // Fetch the user
     let { data: user, error: fetchError } = await supabase
       .from('users')
-      .select('user_bookmarked')
-      .eq('email', email) // change userEmail to email
+      .select('*') // Select all fields
+      .eq('id', userId)
       .maybeSingle();
 
-    if (fetchError || !user) {
+    if (fetchError) {
       console.error('Error fetching user:', fetchError);
+      res.status(500).json({ error: 'Error fetching user' });
+      return;
+    }
+
+    if (!user) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
-    // Return the user_bookmarked array
-    res.status(200).json({ email, bookmarks: user.user_bookmarked ?? [] }); // change userEmail to email
+    // Fetch the bookmarked posts
+    let { data: bookmarkedPosts, error: bookmarkedPostsError } = await supabase
+      .from('user_bookmarked_posts')
+      .select('post_id')
+      .eq('user_id', userId);
+
+    if (bookmarkedPostsError) {
+      console.error('Error fetching bookmarked posts:', bookmarkedPostsError);
+      res.status(500).json({ error: 'Error fetching bookmarked posts' });
+      return;
+    }
+
+    // Fetch the full details of the bookmarked posts
+    let { data: bookmarkedPostsDetails, error: postsError } = await supabase
+      .from('tools')
+      .select('*')
+      .in('id', bookmarkedPosts.map(bookmark => bookmark.post_id));
+
+    if (postsError) {
+      console.error('Error fetching posts:', postsError);
+      res.status(500).json({ error: 'Error fetching posts' });
+      return;
+    }
+
+    // Return the user object along with the bookmarked posts
+    res.status(200).json({ user, bookmarkedPosts: bookmarkedPostsDetails });
   } catch (error) {
     console.error('Error fetching bookmarks:', error);
     res.status(500).json({ error: 'Error fetching bookmarks' });
   }
 });
-
-app.get('/getPosts', async (req, res) => {
-  let { ids, email, bookmarkedPage, addedPage, limit } = req.query;
-
-  let idArray = JSON.parse(ids);
-  page = Number(page);
-  limit = Number(limit);
-
-  // Convert ids to numbers
-  idArray = idArray.map(id => Number(id));
-
-  try {
-    // Fetch all bookmarked posts
-    const { data: allBookmarkedPosts, error: bookmarkedPostsError } = await supabase
-      .from('tools')
-      .select('*')
-      .in('id', idArray);
-
-    if (bookmarkedPostsError) throw bookmarkedPostsError;
-
-    // Fetch all added posts
-    const { data: allAddedPosts, error: addedPostsError } = await supabase
-      .from('email')
-      .select('*')
-      .eq('email', email);
-
-    if (addedPostsError) throw addedPostsError;
-
-    // Manually paginate the results
-    const bookmarkedPosts = allBookmarkedPosts.slice((bookmarkedPage - 1) * limit, bookmarkedPage * limit);
-    const addedPosts = allAddedPosts.slice((addedPage - 1) * limit, addedPage * limit);
-
-    // Return the posts
-    res.status(200).json({ bookmarkedPosts, addedPosts, totalBookmarkedPosts: allBookmarkedPosts.length, totalAddedPosts: allAddedPosts.length });
-  } catch (error) {
-    console.error('Error fetching posts:', error);
-    res.status(500).json({ error: 'Error fetching posts' });
-  }
-});
-
 
 
 
@@ -316,28 +322,18 @@ app.post('/report-issue', async (req, res) => {
 app.post('/send-email', async (req, res) => {
   console.log('Request body:', req.body);
 
-  const { email, post_link, post_category, post_description, post_price, post_title } = req.body;
+  const { user_id, email, post_link, post_category, post_description, post_price, post_title } = req.body;
   const toolId = uuidv4(); // Generate a unique id for the tool
 
-  const { error: insertError } = await supabase
-  .from('email')
-  .insert([{ uuid: toolId, email, post_link, post_category, post_description, post_price, post_title }]);
+  const { data, error: insertError } = await supabase
+  .from('user_added_posts')
+  .insert([{ user_id, post_id: toolId, post_link, post_category, post_description, post_price, post_title, status: 'pending' }]);
+  
+  if (insertError) {
+    console.log('Database error:', insertError.message);
+    return res.status(500).json({ error: insertError.message });
+  }
 
-if (insertError) {
-  console.log('Database error:', insertError.message);
-  return res.status(500).json({ error: insertError.message });
-}
-
-// Now, when you want to refer to this record, use the toolId
-const { data, error: selectError } = await supabase
-  .from('email')
-  .select('*')
-  .eq('uuid', toolId);
-
-if (selectError) {
-  console.log('Database error:', selectError.message);
-  return res.status(500).json({ error: selectError.message });
-}
 
   const emailData = {
     from: 'Yeai <noreply@yeai.tech>',
@@ -353,6 +349,7 @@ if (selectError) {
     html: `
       <p>A new tool has been submitted for review.</p>
       <p>Details:</p>
+      <p>${user_id}</p>
       <p>${email}</p>
       <p>${post_title}</p>
       <p>${post_link}</p>
@@ -379,51 +376,32 @@ app.get('/update-tool-status', async (req, res) => {
   const { toolId, pending } = req.query;
 
   let { error } = await supabase
-  .from('email')
+  .from('user_added_posts')
   .update({ status: pending })
-  .eq('uuid', toolId);
+  .eq('post_id', toolId);
 
-if (error) {
-  return res.status(500).send(`An error occurred: ${error.message}`);
-}
-
-let { data, error: fetchError } = await supabase
-  .from('email')
-  .select('*')
-  .eq('uuid', toolId);
-
-if (fetchError) {
-  return res.status(500).send(`An error occurred: ${fetchError.message}`);
-}
-
-if (pending === 'approved') {
-  console.log('Data before insert into tools:', data);
-  try {
-    const { uuid, ...toolData } = data[0]; // Destructure uuid from data[0]
-    console.log('Inserting tool data:', toolData); // Log the data being inserted
-    const { data: insertedToolData, error: toolError } = await supabase
-      .from('tools')
-      .insert([{ email_id: toolId, ...toolData }]); // Spread the remaining fields
-
-    if (toolError) {
-      console.log('Error inserting into tools:', toolError.message);
-      console.log('Failed tool data:', toolData); // Log the data that failed to insert
-      return res.status(500).send(`An error occurred: ${toolError.message}`);
-    }
-  } catch (err) {
-    console.error('Unexpected error when inserting into tools:', err);
-    console.error('Failed tool data:', toolData); // Log the data that caused the error
-    return res.status(500).send(`An unexpected error occurred: ${err.message}`);
+  if (error) {
+    return res.status(500).send(`An error occurred: ${error.message}`);
   }
-}
-  else if (pending === 'declined') {
-    const { data: declinedData, error: declinedError } = await supabase
-    .from('email')
-    .update({ status: 'declined' })
-    .eq('uuid', toolId);
 
-    if (declinedError) {
-      return res.status(500).send(`An error occurred: ${declinedError.message}`);
+  let { data, error: fetchError } = await supabase
+    .from('user_added_posts')
+    .select('*')
+    .eq('post_id', toolId);
+
+  if (fetchError) {
+    return res.status(500).send(`An error occurred: ${fetchError.message}`);
+  }
+
+  if (pending === 'approved') {
+    const { user_id, post_id, ...toolData } = data[0]; // Destructure user_id and post_id from data[0]
+    const { error: toolInsertError } = await supabase
+      .from('tools')
+      .insert([{ id: post_id, ...toolData }]); // Spread the remaining fields
+
+    if (toolInsertError) {
+      console.log('Database error:', toolInsertError.message);
+      return res.status(500).json({ error: toolInsertError.message });
     }
   }
 
