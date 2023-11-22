@@ -285,22 +285,73 @@ app.get("/added-posts/:userId", async (req, res) => {
     .eq("user_id", userId)
     .range(offset, offset + limit - 1);
 
-  res.json({ addedPosts, totalPages: Math.ceil(count / limit) });
+  if (addedError) {
+    console.error("Error fetching added posts: ", addedError);
+    return res.status(500).json({ error: "Error fetching added posts" });
+  }
+
+  // Fetch the favicons for each post
+  for (let post of addedPosts) {
+    const { data: iconData, error: iconError } = await supabase.storage
+      .from("favicons")
+      .getPublicUrl(`${post.id}.png`);
+    if (iconError) {
+      console.error("Error fetching icon: ", iconError);
+    } else {
+      post.icon = iconData;
+    }
+  }
+
+  res.json({ addedPosts, totalPages: Math.ceil(count / limit), totalPosts: count });
 });
 
-app.get("/bookmarked-posts/:bookmarkedPostIds", async (req, res) => {
-  const { bookmarkedPostIds } = req.params;
+
+app.get("/bookmarked-posts/:userId", async (req, res) => {
+  const { userId } = req.params;
   const page = req.query.page || 1;
   const limit = 5;
   const offset = (page - 1) * limit;
 
-  let { data: bookmarkedPosts, error: bookmarkedError, count } = await supabase
+  // Fetch the bookmarked post ids for the user
+  let { data: userBookmarks, error: bookmarkError } = await supabase
+    .from("user_bookmarked_posts")
+    .select("post_id")
+    .eq("user_id", userId);
+
+  // If there's an error fetching the bookmarks, return an error response
+  if (bookmarkError) {
+    res.status(500).json({ error: bookmarkError.message });
+    return;
+  }
+
+  // Extract the post ids from the user bookmarks
+  const postIds = userBookmarks.map(bookmark => bookmark.post_id);
+
+  // Fetch the bookmarked posts
+  let { data: bookmarkedPosts, error: postsError, count } = await supabase
     .from("tools")
     .select("*", { count: "exact" })
-    .in("id", bookmarkedPostIds.split(","))
+    .in("id", postIds)
     .range(offset, offset + limit - 1);
 
-  res.json({ bookmarkedPosts, totalPages: Math.ceil(count / limit) });
+  if (postsError) {
+    console.error("Error fetching bookmarked posts: ", postsError);
+    return res.status(500).json({ error: "Error fetching bookmarked posts" });
+  }
+
+  // Fetch the favicons for each post
+  for (let post of bookmarkedPosts) {
+    const { data: iconData, error: iconError } = await supabase.storage
+      .from("favicons")
+      .getPublicUrl(`${post.id}.png`);
+    if (iconError) {
+      console.error("Error fetching icon: ", iconError);
+    } else {
+      post.icon = iconData;
+    }
+  }
+
+  res.json({ bookmarkedPosts, totalPages: Math.ceil(count / limit), totalPosts: count });
 });
 
 app.post("/report-issue", async (req, res) => {
