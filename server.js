@@ -249,14 +249,18 @@ app.get("/getBookmarkIds", async (req, res) => {
       .select("post_id")
       .eq("user_id", userId);
 
-    const bookmarkedPostIds = bookmarkedPosts ? bookmarkedPosts.map((post) => post.post_id) : [];
+    const bookmarkedPostIds = bookmarkedPosts
+      ? bookmarkedPosts.map((post) => post.post_id)
+      : [];
 
     const { data: addedPosts, error: addedError } = await supabase
       .from("user_added_posts")
       .select("post_id")
       .eq("user_id", userId);
 
-    const userAddedPostIds = addedPosts ? addedPosts.map((post) => post.post_id) : [];
+    const userAddedPostIds = addedPosts
+      ? addedPosts.map((post) => post.post_id)
+      : [];
 
     if (bookmarkedError || addedError) {
       console.error(
@@ -279,7 +283,11 @@ app.get("/added-posts/:userId", async (req, res) => {
   const limit = 5;
   const offset = (page - 1) * limit;
 
-  let { data: addedPosts, error: addedError, count } = await supabase
+  let {
+    data: addedPosts,
+    error: addedError,
+    count,
+  } = await supabase
     .from("user_added_posts")
     .select("*", { count: "exact" })
     .eq("user_id", userId)
@@ -302,9 +310,12 @@ app.get("/added-posts/:userId", async (req, res) => {
     }
   }
 
-  res.json({ addedPosts, totalPages: Math.ceil(count / limit), totalPosts: count });
+  res.json({
+    addedPosts,
+    totalPages: Math.ceil(count / limit),
+    totalPosts: count,
+  });
 });
-
 
 app.get("/bookmarked-posts/:userId", async (req, res) => {
   const { userId } = req.params;
@@ -325,10 +336,14 @@ app.get("/bookmarked-posts/:userId", async (req, res) => {
   }
 
   // Extract the post ids from the user bookmarks
-  const postIds = userBookmarks.map(bookmark => bookmark.post_id);
+  const postIds = userBookmarks.map((bookmark) => bookmark.post_id);
 
   // Fetch the bookmarked posts
-  let { data: bookmarkedPosts, error: postsError, count } = await supabase
+  let {
+    data: bookmarkedPosts,
+    error: postsError,
+    count,
+  } = await supabase
     .from("tools")
     .select("*", { count: "exact" })
     .in("id", postIds)
@@ -351,7 +366,11 @@ app.get("/bookmarked-posts/:userId", async (req, res) => {
     }
   }
 
-  res.json({ bookmarkedPosts, totalPages: Math.ceil(count / limit), totalPosts: count });
+  res.json({
+    bookmarkedPosts,
+    totalPages: Math.ceil(count / limit),
+    totalPosts: count,
+  });
 });
 
 app.post("/report-issue", async (req, res) => {
@@ -384,8 +403,29 @@ app.post("/send-email", async (req, res) => {
     post_description,
     post_price,
     post_title,
+    post_image,
   } = req.body;
+
   const toolId = uuidv4(); // Generate a unique id for the tool
+
+  // Remove the data type and encoding scheme from the base64 string
+  const base64Image = post_image.split(';base64,').pop();
+
+  // Convert the base64 string to a Buffer
+  const imageBuffer = Buffer.from(base64Image, "base64");
+
+  // Upload the image to the 'favicon' bucket with the toolId as the file name
+  const { error: uploadError } = await supabase.storage
+    .from("favicons")
+    .upload(`${toolId}.png`, imageBuffer, { contentType: 'image/png' });
+
+  console.log(`Final image name: ${toolId}.png`);
+
+  if (uploadError) {
+    console.log("Upload error:", uploadError.message);
+    return res.status(500).json({ error: uploadError.message });
+  }
+
 
   const { data, error: insertError } = await supabase
     .from("user_added_posts")
