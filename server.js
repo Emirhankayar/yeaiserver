@@ -42,15 +42,23 @@ const transporter = nodemailer.createTransport({
 const { v4: uuidv4 } = require("uuid");
 
 // Route Handlers
-const retrieveAllCategoriesFromSupabase = async () => {
+const retrieveAllCategoriesFromSupabase = async (type) => {
   try {
-    const { data, error } = await supabase
-      .from("distinct_categories")
-      .select("*")
-      .order("post_category", { ascending: true });
+    let data, error;
+    if (type === 'newscategories') {
+      ({ data, error } = await supabase
+        .from("distinct_news_categories")
+        .select("*")
+        .order("post_category", { ascending: true }));
+    } else if (type === 'categories') {
+      ({ data, error } = await supabase
+        .from("distinct_categories")
+        .select("*")
+        .order("post_category", { ascending: true }));
+    }
 
     if (error) {
-      console.error("Error fetching categories:", error);
+      console.error(`Error fetching ${type}:`, error);
       return [];
     }
 
@@ -59,13 +67,14 @@ const retrieveAllCategoriesFromSupabase = async () => {
       .filter((category) => category !== null);
     return categories;
   } catch (error) {
-    console.error("Error fetching distinct categories:", error.message);
+    console.error(`Error fetching distinct ${type}:`, error.message);
     return [];
   }
 };
 
 app.get("/allCategories", async (req, res) => {
-  const categories = await retrieveAllCategoriesFromSupabase();
+  const type = req.query.type;
+  const categories = await retrieveAllCategoriesFromSupabase(type);
   res.json(categories);
 });
 
@@ -164,6 +173,71 @@ app.get("/postsByCategory", async (req, res) => {
     return res.status(500).json({ error: "Error fetching posts" });
   }
 });
+
+
+
+app.get("/newsByCategory", async (req, res) => {
+  const {
+    categoryName,
+    offset,
+    limit,
+    searchTerm,
+    sortBy,
+    sortOrder,
+  } = req.query;
+
+  try {
+    let query = supabase.from("news").select("*");
+
+    if (categoryName) {
+      query = query.eq("post_category", categoryName);
+    }
+
+    if (searchTerm) {
+      query = query.ilike("post_title", `%${searchTerm}%`); // Filter posts by title
+    }
+
+    if (sortBy) {
+      query = query.order(sortBy, { ascending: sortOrder === "asc" }); // Sort posts
+    }
+
+    const { data: allPosts, error } = await query;
+
+    if (error) {
+      return res.status(500).json({ error: "Error fetching posts" });
+    }
+
+    const totalPosts = allPosts.length;
+
+    const posts = allPosts.slice(
+      parseInt(offset) * parseInt(limit),
+      (parseInt(offset) + 1) * parseInt(limit)
+    );
+
+    // Fetch image URLs for each post
+    for (let post of posts) {
+      const { data: imageData, error: imageError } = await supabase.storage
+        .from("news_images")
+        .getPublicUrl(`${post.post_id}.png`);
+      if (imageError) {
+        console.error("Error fetching image: ", imageError);
+        return res.status(500).json({ error: "Error fetching image" });
+      }
+
+      post.image = imageData;
+    }
+
+    return res.status(200).json({ posts, totalPosts });
+  } catch (error) {
+    return res.status(500).json({ error: "Error fetching posts" });
+  }
+});
+
+
+
+
+
+
 
 app.put("/updatePostView", async (req, res) => {
   const { postId, post_view } = req.body;
