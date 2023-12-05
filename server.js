@@ -489,16 +489,13 @@ app.post("/newsletter", async (req, res) => {
         </table>
       `,
     };
-    await new Promise((resolve, reject) => {
-      transporter.sendMail(mailOptions, function(error, info){
-        if (error) {
-          console.log('Error sending email: ', error);
-          reject(error); // Reject the promise with the error
-        } else {
-          console.log('Email sent: ' + info.response);
-          resolve(info.response); // Resolve the promise with the response
-        }
-      });
+
+    transporter.sendMail(mailOptions, function(error, info){
+      if (error) {
+        console.log('Error sending email: ', error);
+      } else {
+        console.log('Email sent: ' + info.response);
+      }
     });
   }
 
@@ -607,13 +604,13 @@ app.post("/survey", async (req, res) => {
 
 
 app.post("/report-issue", async (req, res) => {
-  const { post, message, email } = req.body;
+  const { post_name, post_id, message, email } = req.body;
 
   const emailData = {
     from: email,
     to: "emirhan.kayar80@gmail.com",
-    subject: `Report for post: ${post}`,
-    text: message,
+    subject: `Report for post: ${post_name}`,
+    text: `Post ID: ${post_id}\nPost Name: ${post_name}\nMessage: ${message}`,
   };
 
   transporter
