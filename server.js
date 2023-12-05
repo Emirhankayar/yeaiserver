@@ -33,12 +33,15 @@ if (
 const supabase = createClient(supabaseUrl, supabaseKey);
 const transporter = nodemailer.createTransport({
   host: smtpHost,
+  pool: true,
   port: smtpPort,
+  secure: false,
   auth: {
     user: smtpUser,
     pass: smtpPass,
   },
 });
+
 const { v4: uuidv4 } = require("uuid");
 
 // Route Handlers
