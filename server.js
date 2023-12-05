@@ -447,6 +447,159 @@ app.get("/bookmarked-posts/:userId", async (req, res) => {
   });
 });
 
+app.post("/checkCode", async (req, res) => {
+  const { code } = req.body;
+
+  let { data: existing, error } = await supabase
+    .from('email')
+    .select('code')
+    .eq('code', code)
+    .maybeSingle();
+
+  if (error) {
+    console.log(error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  return res.status(200).json({ data: existing !== null });
+});
+
+app.post("/newsletter", async (req, res) => {
+  const { email } = req.body;
+
+  // Function to send email
+  const sendEmail = async (code) => {
+    let mailOptions = {
+      from: "Yeai <noreply@yeai.tech>",
+      to: email,
+      subject: 'Welcome to our newsletter!',
+      html: `
+        <table width="100%" height="100%" style="background-image: url('https://lpeluavqvjmvsoenizuy.supabase.co/storage/v1/object/public/email/bg.png?t=2023-12-05T10%3A29%3A10.319Z'); background-repeat: no-repeat; background-position: center center; background-size: cover;">
+          <tr>
+            <td>
+              <h1>Welcome to our newsletter!</h1>
+              <p>Thank you for subscribing to our newsletter.</p>
+              <p>If you wish to unsubscribe, please click the link below:</p>
+              <a href="https://yeai.tech/unsubscribe?code=${code}">Unsubscribe</a>
+            </td>
+          </tr>
+        </table>
+      `,
+    };
+
+    transporter.sendMail(mailOptions, function(error, info){
+      if (error) {
+        console.log(error);
+      } else {
+        console.log('Email sent: ' + info.response);
+      }
+    });
+  }
+
+  // Check if the email already exists and is subscribed
+  let { data: existing, error: existingError } = await supabase
+    .from('email')
+    .select('subscribe, code')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (existingError) {
+    console.log(existingError);
+    return res.status(500).json({ error: existingError.message });
+  }
+
+  if (existing && existing.subscribe === true) {
+    return res.status(400).json({ error: 'Email is already subscribed.' });
+  }
+
+  if (existing && existing.subscribe === false) {
+    // Generate a new UUID for the code column
+    const newCode = uuidv4();
+  
+    let { data: updated, error: updateError } = await supabase
+      .from('email')
+      .update({ subscribe: true, code: newCode }) // Update the code
+      .eq('email', email);
+  
+    if (updateError) {
+      console.log(updateError);
+      return res.status(500).json({ error: updateError.message });
+    }
+  
+    // Send email
+    await sendEmail(newCode);
+  
+    return res.status(200).json({ data: updated });
+  }
+
+  let { data, error } = await supabase
+    .from('email')
+    .insert([
+      { email: email },
+    ])
+    .single();
+
+  if (error) {
+    console.log(error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  // Query the database for the inserted email
+  let { data: insertedEmail, error: queryError } = await supabase
+    .from('email')
+    .select('code')
+    .eq('email', email)
+    .single();
+
+  if (queryError) {
+    console.log(queryError);
+    return res.status(500).json({ error: queryError.message });
+  }
+
+  // Get the id of the inserted email
+  const code = insertedEmail.code;
+
+  // Send email
+  await sendEmail(code);
+
+  return res.status(200).json({ data });
+});
+
+app.post("/unsubscribe", async (req, res) => {
+  const { code } = req.body;
+
+  // Generate a new UUID for the code column
+  const newCode = uuidv4();
+
+  let { data, error } = await supabase
+    .from('email')
+    .update({ subscribe: false, code: newCode }) // Update the code
+    .eq('code', code);
+
+  if (error) {
+    console.log(error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  return res.status(200).json({ data });
+});
+
+app.post("/survey", async (req, res) => {
+  const { answer } = req.body;
+
+  let { data, error } = await supabase
+    .from('survey')
+    .insert({ answer }) // pass an object to the insert method
+
+  if (error) {
+    console.log(error);
+    return res.status(500).json({ error: error.message });
+  }
+
+  return res.status(200).json({ data });
+});
+
+
 app.post("/report-issue", async (req, res) => {
   const { post, message, email } = req.body;
 
