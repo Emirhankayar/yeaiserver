@@ -489,13 +489,16 @@ app.post("/newsletter", async (req, res) => {
         </table>
       `,
     };
-
-    transporter.sendMail(mailOptions, function(error, info){
-      if (error) {
-        console.log('Error sending email: ', error);
-      } else {
-        console.log('Email sent: ' + info.response);
-      }
+    await new Promise((resolve, reject) => {
+      transporter.sendMail(mailOptions, function(error, info){
+        if (error) {
+          console.log('Error sending email: ', error);
+          reject(error); // Reject the promise with the error
+        } else {
+          console.log('Email sent: ' + info.response);
+          resolve(info.response); // Resolve the promise with the response
+        }
+      });
     });
   }
 
