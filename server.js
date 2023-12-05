@@ -489,7 +489,7 @@ app.post("/newsletter", async (req, res) => {
 
     transporter.sendMail(mailOptions, function(error, info){
       if (error) {
-        console.log(error);
+        console.log('Error sending email: ', error);
       } else {
         console.log('Email sent: ' + info.response);
       }
